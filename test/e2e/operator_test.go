@@ -360,6 +360,13 @@ func TestIngressControllerScale(t *testing.T) {
 		t.Fatalf("failed to get default ingresscontroller deployment: %v", err)
 	}
 
+	// use a shorter minReadySeconds in the test to keep the test fast and also
+	// to verify that customers can tune this value for their own load balancers
+	deployment.Spec.MinReadySeconds = 5
+	if err := kclient.Update(context.TODO(), deployment); err != nil {
+		t.Fatalf("failed to update default ingresscontroller deployment: %v", err)
+	}
+
 	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
 	if err != nil {
 		t.Fatalf("router deployment has invalid spec.selector: %v", err)
@@ -430,6 +437,15 @@ func TestIngressControllerScale(t *testing.T) {
 	// TODO: assert that the conditions hold steady for some amount of time?
 	if err := waitForIngressControllerCondition(t, kclient, 5*time.Minute, defaultName, nondefaultAvailableConditions...); err != nil {
 		t.Fatalf("failed to observe expected conditions: %v", err)
+	}
+
+	// Ensure the minReadySeconds is still 5
+	deployment = &appsv1.Deployment{}
+	if err := kclient.Get(context.TODO(), controller.RouterDeploymentName(ic), deployment); err != nil {
+		t.Fatalf("failed to get default ingresscontroller deployment: %v", err)
+	}
+	if deployment.Spec.MinReadySeconds != 5 {
+		t.Fatalf("controller reverted valid user edit to deployment spec.minReadySeconds: %d", deployment.Spec.MinReadySeconds)
 	}
 
 	// Ensure the deployment did not create a new replicaset
